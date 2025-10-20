@@ -1,0 +1,142 @@
+<?php
+
+namespace App\Vito\Plugins\Flowan\VitoServiceRadarr\Services;
+
+use App\Actions\FirewallRule\ManageRule;
+use App\Services\AbstractService;
+use Closure;
+use Illuminate\Validation\Rule;
+
+class Radarr extends AbstractService
+{
+    public static function id(): string
+    {
+        return 'radarr';
+    }
+
+    public static function type(): string
+    {
+        return 'automation';
+    }
+
+    public function unit(): string
+    {
+        return 'radarr';
+    }
+
+    public function data(): array
+    {
+        return [
+            'port' => $this->service->type_data['port'] ?? 7878,
+            'branch' => $this->service->type_data['branch'] ?? 'master',
+        ];
+    }
+
+    public function creationData(array $input): array
+    {
+        return [
+            'port' => 7878,
+            'branch' => 'master',
+        ];
+    }
+
+    public function creationRules(array $input): array
+    {
+        return [
+            'type' => [
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    $existingService = $this->service->server->services()
+                        ->where('type', self::type())
+                        ->where('name', self::id())
+                        ->exists();
+                    if ($existingService) {
+                        $fail('Radarr is already installed on this server.');
+                    }
+                },
+            ],
+            'version' => ['required', Rule::in(['latest'])],
+        ];
+    }
+
+    public function install(): void
+    {
+        $this->service->server->ssh()->exec(
+            view('vito-service-radarr::install-radarr'),
+            'install-radarr'
+        );
+
+        app(ManageRule::class)->create($this->service->server, [
+            'name' => 'Radarr',
+            'type' => 'allow',
+            'protocol' => 'tcp',
+            'port' => $this->data()['port'],
+            'source_any' => true,
+        ]);
+
+        sleep(10); // wait for radarr to start
+
+        $status = $this->service->server->systemd()->status($this->unit());
+        $this->service->validateInstall($status);
+
+        $this->service->type_data = $this->data();
+        $this->service->save();
+
+        event('service.installed', $this->service);
+        $this->service->server->os()->cleanup();
+    }
+
+    public function uninstall(): void
+    {
+        $this->service->server->ssh()->exec(
+            view('vito-service-radarr::uninstall-radarr'),
+            'uninstall-radarr'
+        );
+
+        if ($rule = $this->service->server->firewallRules()
+            ->where('name', 'Radarr')
+            ->where('port', $this->data()['port'])
+            ->first()
+        ) {
+            app(ManageRule::class)->delete($rule);
+        }
+
+        event('service.uninstalled', $this->service);
+        $this->service->server->os()->cleanup();
+    }
+
+    public function enable(): void
+    {
+        $this->service->server->systemd()->enable($this->unit());
+    }
+
+    public function disable(): void
+    {
+        $this->service->server->systemd()->disable($this->unit());
+    }
+
+    public function restart(): void
+    {
+        $this->service->server->systemd()->restart($this->unit());
+    }
+
+    public function stop(): void
+    {
+        $this->service->server->systemd()->stop($this->unit());
+    }
+
+    public function start(): void
+    {
+        $this->service->server->systemd()->start($this->unit());
+    }
+
+    public function status(): string
+    {
+        try {
+            $result = $this->service->server->ssh()->exec('sudo systemctl is-active radarr');
+
+            return trim($result) === 'active' ? 'running' : 'stopped';
+        } catch (\Exception $e) {
+            return 'stopped';
+        }
+    }
+}
