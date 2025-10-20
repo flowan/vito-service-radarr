@@ -62,3 +62,10 @@ sudo systemctl -q daemon-reload
 sudo systemctl enable --now -q radarr
 
 sudo rm Radarr*.linux*.tar.gz
+
+sudo mkdir -p /home/vito/media
+sudo mkdir -p /home/vito/media/movies
+sudo chown vito:media /home/vito/media
+sudo chown vito:media /home/vito/media/movies
+sudo chmod 775 /home/vito/media
+sudo chmod 775 /home/vito/media/movies
