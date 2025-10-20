@@ -1,6 +1,8 @@
 sudo apt-get update -y
 sudo apt-get install curl sqlite3 -y
 
+sudo systemctl stop radarr
+
 if ! getent group media >/dev/null; then
     sudo groupadd media
 fi
@@ -39,6 +41,8 @@ sudo rm -rf /opt/Radarr
 sudo mv Radarr /opt/
 sudo chown radarr:media -R /opt/Radarr
 sudo chmod 775 /opt/Radarr
+
+sudo rm -rf /etc/systemd/system/radarr.service
 
 cat << EOF | sudo tee /etc/systemd/system/radarr.service > /dev/null
 [Unit]
