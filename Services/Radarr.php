@@ -61,7 +61,9 @@ class Radarr extends AbstractService
     public function install(): void
     {
         $this->service->server->ssh()->exec(
-            view('vito-service-radarr::install-radarr'),
+            view('vito-service-radarr::install-radarr', [
+                'branch' => $this->data()['branch'],
+            ]),
             'install-radarr'
         );
 
